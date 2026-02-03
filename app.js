@@ -368,33 +368,80 @@ function importDeltasFile(file) {
             const sheet = workbook.Sheets[workbook.SheetNames[0]];
             const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
             
-            // Expected format: Tier Name | Tab Name | Delta
-            // Skip header row if present
-            const startRow = (rows[0] && typeof rows[0][0] === 'string' && 
-                             rows[0][0].toLowerCase().includes('tier')) ? 1 : 0;
+            // Detect header row and column mapping
+            const headerRow = rows[0] || [];
+            const headers = headerRow.map(h => String(h).toLowerCase().trim());
+            
+            // Find column indices - support multiple formats
+            let tabCol = -1, tierCol = -1, deltaCol = -1;
+            
+            headers.forEach((h, i) => {
+                if (h === 'tab' || h === 'tab name' || h === 'sheet' || h === 'product') tabCol = i;
+                if (h === 'tier' || h === 'tier name' || h === 'tier number') tierCol = i;
+                if (h === 'adjustment' || h === 'delta' || h === 'adj' || h === 'change') deltaCol = i;
+            });
+            
+            // Fallback: try to detect format by first data row
+            if (tabCol === -1 || tierCol === -1 || deltaCol === -1) {
+                // Check if it's Tab | Tier | Adjustment format
+                if (rows[1] && state.sheetNames.includes(String(rows[1][0]).trim())) {
+                    tabCol = 0; tierCol = 1; deltaCol = 2;
+                }
+                // Check if it's Tier | Tab | Adjustment format
+                else if (rows[1] && state.sheetNames.includes(String(rows[1][1]).trim())) {
+                    tierCol = 0; tabCol = 1; deltaCol = 2;
+                }
+            }
+            
+            if (tabCol === -1 || tierCol === -1 || deltaCol === -1) {
+                alert('Could not detect column format. Please use columns: Tab, Tier, Adjustment');
+                return;
+            }
             
             // Group by tier
             const tierMap = new Map();
             
-            for (let i = startRow; i < rows.length; i++) {
-                const [tierName, tabName, delta] = rows[i];
-                if (!tierName || !tabName || delta === undefined) continue;
+            for (let i = 1; i < rows.length; i++) {
+                const row = rows[i];
+                if (!row || row.length === 0) continue;
                 
-                const normalizedTier = String(tierName).trim();
-                const normalizedTab = String(tabName).trim();
-                const deltaValue = parseFloat(delta) || 0;
+                const tabName = String(row[tabCol] || '').trim();
+                const tierValue = row[tierCol];
+                const delta = parseFloat(row[deltaCol]);
                 
-                if (!tierMap.has(normalizedTier)) {
-                    tierMap.set(normalizedTier, {});
+                if (!tabName || tierValue === undefined || isNaN(delta)) continue;
+                
+                // Normalize tier name (handle numeric tiers like 2 -> "Tier 2")
+                let tierName;
+                if (typeof tierValue === 'number' || !isNaN(Number(tierValue))) {
+                    tierName = `Tier ${tierValue}`;
+                } else {
+                    tierName = String(tierValue).trim();
                 }
-                tierMap.get(normalizedTier)[normalizedTab] = deltaValue;
+                
+                if (!tierMap.has(tierName)) {
+                    tierMap.set(tierName, {});
+                }
+                tierMap.get(tierName)[tabName] = delta;
+            }
+            
+            if (tierMap.size === 0) {
+                alert('No valid tier data found in file.');
+                return;
             }
             
             // Clear existing tiers and add imported ones
             state.tiers = [];
             tiersContainer.innerHTML = '';
             
-            tierMap.forEach((deltas, tierName) => {
+            // Sort tiers by name for consistent ordering
+            const sortedTiers = Array.from(tierMap.entries()).sort((a, b) => {
+                const numA = parseInt(a[0].replace(/\D/g, '')) || 0;
+                const numB = parseInt(b[0].replace(/\D/g, '')) || 0;
+                return numA - numB;
+            });
+            
+            sortedTiers.forEach(([tierName, deltas]) => {
                 const tier = {
                     id: Date.now() + Math.random(),
                     name: tierName,
@@ -402,8 +449,8 @@ function importDeltasFile(file) {
                 };
                 
                 // Initialize all sheets to 0, then apply imported deltas
-                state.sheetNames.forEach(sheet => {
-                    tier.deltas[sheet] = deltas[sheet] || 0;
+                state.sheetNames.forEach(sheetName => {
+                    tier.deltas[sheetName] = deltas[sheetName] || 0;
                 });
                 
                 state.tiers.push(tier);
@@ -411,7 +458,14 @@ function importDeltasFile(file) {
             });
             
             updateGenerateButton();
-            alert(`Imported ${tierMap.size} tier(s) from file`);
+            
+            // Show summary of what was imported
+            const tabsWithDeltas = new Set();
+            tierMap.forEach(deltas => {
+                Object.keys(deltas).forEach(tab => tabsWithDeltas.add(tab));
+            });
+            
+            alert(`Imported ${tierMap.size} tier(s) with adjustments for ${tabsWithDeltas.size} tab(s)`);
             
         } catch (err) {
             console.error('Error importing deltas:', err);

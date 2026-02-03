@@ -147,38 +147,41 @@
 
             <div class="delta-example">
                 <h3>Delta File Format</h3>
-                <p>You can import deltas from an Excel file with this structure:</p>
+                <p>You can import deltas from an Excel file. Supports multiple formats:</p>
                 <table class="example-table">
                     <thead>
                         <tr>
-                            <th>Tier Name</th>
-                            <th>Tab Name</th>
-                            <th>Delta</th>
+                            <th>Tab</th>
+                            <th>Tier</th>
+                            <th>Adjustment</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
-                            <td>Tier 2</td>
                             <td>DSCR1</td>
+                            <td>2</td>
                             <td>-0.25</td>
                         </tr>
                         <tr>
-                            <td>Tier 2</td>
                             <td>DSCR2</td>
+                            <td>2</td>
                             <td>0.75</td>
                         </tr>
                         <tr>
-                            <td>Tier 3</td>
                             <td>DSCR1</td>
+                            <td>3</td>
                             <td>-0.50</td>
                         </tr>
                         <tr>
-                            <td>Tier 3</td>
                             <td>DSCR2</td>
+                            <td>3</td>
                             <td>0.50</td>
                         </tr>
                     </tbody>
                 </table>
+                <p style="margin-top: 0.75rem; font-size: 0.8125rem; color: var(--color-gray-500);">
+                    Column headers can be: Tab/Sheet/Product, Tier, Adjustment/Delta/Adj
+                </p>
             </div>
         </div>
     </section>
