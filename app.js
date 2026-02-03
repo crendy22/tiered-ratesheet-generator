@@ -463,11 +463,6 @@ async function importDeltasFile(file) {
         
         updateGenerateButton();
         
-        const tabsWithDeltas = new Set();
-        tierMap.forEach(deltas => Object.keys(deltas).forEach(tab => tabsWithDeltas.add(tab)));
-        
-        alert(`Imported ${tierMap.size} tier(s) with adjustments for ${tabsWithDeltas.size} tab(s)`);
-        
     } catch (err) {
         console.error('Error importing deltas:', err);
         alert('Error importing deltas file. Please check the format.');
