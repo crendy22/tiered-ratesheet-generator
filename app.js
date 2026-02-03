@@ -1,10 +1,10 @@
 // State
 let state = {
-    baseWorkbook: null,
+    baseFileBuffer: null,  // Store raw file buffer for ExcelJS
     baseFileName: '',
     sheetNames: [],
     tiers: [],
-    pricingGrids: {} // Store detected pricing grid locations per sheet
+    pricingGrids: {}
 };
 
 // Navigation elements
@@ -24,7 +24,6 @@ function updateNavigation(activeStep) {
         }
     });
     
-    // Update step numbers
     document.getElementById('step-1-number').classList.toggle('complete', activeStep > 1);
     document.getElementById('step-2-number').classList.toggle('complete', activeStep > 2);
 }
@@ -67,21 +66,18 @@ function init() {
 // ============================================
 
 function setupUploadZone() {
-    // Click to upload
     baseUploadZone.addEventListener('click', (e) => {
         if (!baseUploadZone.classList.contains('has-file')) {
             baseFileInput.click();
         }
     });
 
-    // File input change
     baseFileInput.addEventListener('change', (e) => {
         if (e.target.files.length > 0) {
             handleBaseFile(e.target.files[0]);
         }
     });
 
-    // Drag and drop
     baseUploadZone.addEventListener('dragover', (e) => {
         e.preventDefault();
         baseUploadZone.classList.add('dragover');
@@ -99,83 +95,78 @@ function setupUploadZone() {
         }
     });
 
-    // Remove file
     baseRemove.addEventListener('click', (e) => {
         e.stopPropagation();
         resetBaseFile();
     });
 }
 
-function handleBaseFile(file) {
+async function handleBaseFile(file) {
     if (!file.name.match(/\.xlsx?$/i)) {
         alert('Please upload an Excel file (.xlsx or .xls)');
         return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        try {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, { type: 'array' });
-            
-            state.baseWorkbook = workbook;
-            state.baseFileName = file.name;
-            state.sheetNames = workbook.SheetNames;
-            
-            // Detect pricing grids in each sheet
-            detectPricingGrids(workbook);
-            
-            // Update UI
-            showBaseFileSuccess(file.name, state.sheetNames.length);
-            enableStep2();
-            
-        } catch (err) {
-            console.error('Error reading file:', err);
-            alert('Error reading file. Please make sure it\'s a valid Excel file.');
-        }
-    };
-    reader.readAsArrayBuffer(file);
+    try {
+        updateStatus('Loading file...', true);
+        
+        const buffer = await file.arrayBuffer();
+        state.baseFileBuffer = buffer;
+        state.baseFileName = file.name;
+        
+        // Load with ExcelJS to get sheet names and detect grids
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(buffer);
+        
+        state.sheetNames = workbook.worksheets.map(ws => ws.name);
+        
+        // Detect pricing grids
+        detectPricingGrids(workbook);
+        
+        showBaseFileSuccess(file.name, state.sheetNames.length);
+        enableStep2();
+        
+    } catch (err) {
+        console.error('Error reading file:', err);
+        alert('Error reading file. Please make sure it\'s a valid Excel file.');
+        updateStatus('Error', false);
+    }
 }
 
 function detectPricingGrids(workbook) {
     state.pricingGrids = {};
     
-    workbook.SheetNames.forEach(sheetName => {
-        const sheet = workbook.Sheets[sheetName];
-        const gridInfo = findPricingGrid(sheet);
+    workbook.worksheets.forEach(worksheet => {
+        const gridInfo = findPricingGrid(worksheet);
         if (gridInfo) {
-            state.pricingGrids[sheetName] = gridInfo;
+            state.pricingGrids[worksheet.name] = gridInfo;
         }
     });
 }
 
-function findPricingGrid(sheet) {
-    // Look for the pricing grid pattern:
-    // Row with "Rate" and lock period headers (7 Day, 15 Day, etc.)
-    // Followed by rows with rate values and pricing
-    
-    const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1');
+function findPricingGrid(worksheet) {
     let headerRow = -1;
     let rateCol = -1;
     let pricingStartCol = -1;
     let pricingEndCol = -1;
     
-    // Find header row with "Rate" and lock periods
-    for (let r = 0; r <= Math.min(range.e.r, 20); r++) {
-        for (let c = 0; c <= range.e.c; c++) {
-            const cellRef = XLSX.utils.encode_cell({ r, c });
-            const cell = sheet[cellRef];
-            if (cell && String(cell.v).toLowerCase() === 'rate') {
-                // Check if next cells have lock period headers
-                const nextCell = sheet[XLSX.utils.encode_cell({ r, c: c + 1 })];
-                if (nextCell && String(nextCell.v).toLowerCase().includes('day')) {
+    // Search first 25 rows for header
+    for (let r = 1; r <= Math.min(25, worksheet.rowCount); r++) {
+        const row = worksheet.getRow(r);
+        for (let c = 1; c <= Math.min(15, worksheet.columnCount); c++) {
+            const cell = row.getCell(c);
+            const value = cell.value;
+            if (value && String(value).toLowerCase() === 'rate') {
+                // Check next cell for "day"
+                const nextCell = row.getCell(c + 1);
+                if (nextCell.value && String(nextCell.value).toLowerCase().includes('day')) {
                     headerRow = r;
                     rateCol = c;
                     
-                    // Find pricing columns (those with "Day" in header)
-                    for (let pc = c + 1; pc <= range.e.c; pc++) {
-                        const headerCell = sheet[XLSX.utils.encode_cell({ r, c: pc })];
-                        if (headerCell && String(headerCell.v).toLowerCase().includes('day')) {
+                    // Find all pricing columns
+                    for (let pc = c + 1; pc <= Math.min(c + 10, worksheet.columnCount); pc++) {
+                        const headerCell = row.getCell(pc);
+                        if (headerCell.value && String(headerCell.value).toLowerCase().includes('day')) {
                             if (pricingStartCol === -1) pricingStartCol = pc;
                             pricingEndCol = pc;
                         }
@@ -189,16 +180,18 @@ function findPricingGrid(sheet) {
     
     if (headerRow === -1) return null;
     
-    // Find data rows (rows with numeric rate values)
+    // Find data rows
     let dataStartRow = headerRow + 1;
     let dataEndRow = dataStartRow;
     
-    for (let r = headerRow + 1; r <= range.e.r; r++) {
-        const rateCell = sheet[XLSX.utils.encode_cell({ r, c: rateCol })];
-        if (rateCell && !isNaN(parseFloat(rateCell.v))) {
+    for (let r = headerRow + 1; r <= worksheet.rowCount; r++) {
+        const row = worksheet.getRow(r);
+        const rateCell = row.getCell(rateCol);
+        const rateValue = rateCell.value;
+        
+        if (rateValue !== null && rateValue !== undefined && !isNaN(parseFloat(rateValue))) {
             dataEndRow = r;
         } else if (dataEndRow > dataStartRow) {
-            // Hit a non-numeric row after finding data
             break;
         }
     }
@@ -222,7 +215,7 @@ function showBaseFileSuccess(filename, sheetCount) {
 }
 
 function resetBaseFile() {
-    state.baseWorkbook = null;
+    state.baseFileBuffer = null;
     state.baseFileName = '';
     state.sheetNames = [];
     state.pricingGrids = {};
@@ -261,7 +254,6 @@ function enableStep2() {
     updateNavigation(2);
     updateStatus('Ratesheet loaded');
     
-    // Add initial tier if none exist
     if (state.tiers.length === 0) {
         addTier('Tier 2');
     }
@@ -282,7 +274,6 @@ function addTier(name = 'New Tier') {
         deltas: {}
     };
     
-    // Initialize all deltas to 0
     state.sheetNames.forEach(sheet => {
         tier.deltas[sheet] = 0;
     });
@@ -302,11 +293,16 @@ function renderTier(tier) {
             <input type="text" class="tier-name-input" value="${tier.name}" 
                    onchange="updateTierName(${tier.id}, this.value)">
             <div class="tier-actions">
-                <button class="btn btn-small btn-outline" onclick="copyTier(${tier.id})">
-                    Duplicate
+                <button class="btn btn-ghost btn-small" onclick="copyTier(${tier.id})">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
                 </button>
-                <button class="btn btn-small btn-danger" onclick="removeTier(${tier.id})">
-                    Remove
+                <button class="btn btn-ghost btn-small" onclick="removeTier(${tier.id})">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
                 </button>
             </div>
         </div>
@@ -328,34 +324,25 @@ function renderTier(tier) {
     `;
     
     tiersContainer.appendChild(tierEl);
-    
-    // Apply initial styling to inputs
     tierEl.querySelectorAll('.delta-input').forEach(styleDeltaInput);
 }
 
 function updateTierName(tierId, name) {
     const tier = state.tiers.find(t => t.id === tierId);
-    if (tier) {
-        tier.name = name;
-    }
+    if (tier) tier.name = name;
 }
 
 function updateDelta(tierId, sheetName, value) {
     const tier = state.tiers.find(t => t.id === tierId);
-    if (tier) {
-        tier.deltas[sheetName] = parseFloat(value) || 0;
-    }
+    if (tier) tier.deltas[sheetName] = parseFloat(value) || 0;
     updateGenerateButton();
 }
 
 function styleDeltaInput(input) {
     const value = parseFloat(input.value) || 0;
     input.classList.remove('positive', 'negative');
-    if (value > 0) {
-        input.classList.add('positive');
-    } else if (value < 0) {
-        input.classList.add('negative');
-    }
+    if (value > 0) input.classList.add('positive');
+    else if (value < 0) input.classList.add('negative');
 }
 
 function copyTier(tierId) {
@@ -378,129 +365,113 @@ function removeTier(tierId) {
     if (index === -1) return;
     
     state.tiers.splice(index, 1);
-    
     const tierEl = document.querySelector(`.tier-card[data-tier-id="${tierId}"]`);
-    if (tierEl) {
-        tierEl.remove();
-    }
+    if (tierEl) tierEl.remove();
     
     updateGenerateButton();
 }
 
-function importDeltasFile(file) {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        try {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, { type: 'array' });
-            const sheet = workbook.Sheets[workbook.SheetNames[0]];
-            const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-            
-            // Detect header row and column mapping
-            const headerRow = rows[0] || [];
-            const headers = headerRow.map(h => String(h).toLowerCase().trim());
-            
-            // Find column indices - support multiple formats
-            let tabCol = -1, tierCol = -1, deltaCol = -1;
-            
-            headers.forEach((h, i) => {
-                if (h === 'tab' || h === 'tab name' || h === 'sheet' || h === 'product') tabCol = i;
-                if (h === 'tier' || h === 'tier name' || h === 'tier number') tierCol = i;
-                if (h === 'adjustment' || h === 'delta' || h === 'adj' || h === 'change') deltaCol = i;
-            });
-            
-            // Fallback: try to detect format by first data row
-            if (tabCol === -1 || tierCol === -1 || deltaCol === -1) {
-                // Check if it's Tab | Tier | Adjustment format
-                if (rows[1] && state.sheetNames.includes(String(rows[1][0]).trim())) {
-                    tabCol = 0; tierCol = 1; deltaCol = 2;
-                }
-                // Check if it's Tier | Tab | Adjustment format
-                else if (rows[1] && state.sheetNames.includes(String(rows[1][1]).trim())) {
-                    tierCol = 0; tabCol = 1; deltaCol = 2;
-                }
+async function importDeltasFile(file) {
+    try {
+        const buffer = await file.arrayBuffer();
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(buffer);
+        
+        const worksheet = workbook.worksheets[0];
+        const rows = [];
+        
+        worksheet.eachRow((row, rowNum) => {
+            rows.push(row.values.slice(1)); // slice(1) because ExcelJS is 1-indexed
+        });
+        
+        // Detect header row and column mapping
+        const headerRow = rows[0] || [];
+        const headers = headerRow.map(h => String(h || '').toLowerCase().trim());
+        
+        let tabCol = -1, tierCol = -1, deltaCol = -1;
+        
+        headers.forEach((h, i) => {
+            if (h === 'tab' || h === 'tab name' || h === 'sheet' || h === 'product') tabCol = i;
+            if (h === 'tier' || h === 'tier name' || h === 'tier number') tierCol = i;
+            if (h === 'adjustment' || h === 'delta' || h === 'adj' || h === 'change') deltaCol = i;
+        });
+        
+        // Fallback detection
+        if (tabCol === -1 || tierCol === -1 || deltaCol === -1) {
+            if (rows[1] && state.sheetNames.includes(String(rows[1][0]).trim())) {
+                tabCol = 0; tierCol = 1; deltaCol = 2;
+            } else if (rows[1] && state.sheetNames.includes(String(rows[1][1]).trim())) {
+                tierCol = 0; tabCol = 1; deltaCol = 2;
             }
-            
-            if (tabCol === -1 || tierCol === -1 || deltaCol === -1) {
-                alert('Could not detect column format. Please use columns: Tab, Tier, Adjustment');
-                return;
-            }
-            
-            // Group by tier
-            const tierMap = new Map();
-            
-            for (let i = 1; i < rows.length; i++) {
-                const row = rows[i];
-                if (!row || row.length === 0) continue;
-                
-                const tabName = String(row[tabCol] || '').trim();
-                const tierValue = row[tierCol];
-                const delta = parseFloat(row[deltaCol]);
-                
-                if (!tabName || tierValue === undefined || isNaN(delta)) continue;
-                
-                // Normalize tier name (handle numeric tiers like 2 -> "Tier 2")
-                let tierName;
-                if (typeof tierValue === 'number' || !isNaN(Number(tierValue))) {
-                    tierName = `Tier ${tierValue}`;
-                } else {
-                    tierName = String(tierValue).trim();
-                }
-                
-                if (!tierMap.has(tierName)) {
-                    tierMap.set(tierName, {});
-                }
-                tierMap.get(tierName)[tabName] = delta;
-            }
-            
-            if (tierMap.size === 0) {
-                alert('No valid tier data found in file.');
-                return;
-            }
-            
-            // Clear existing tiers and add imported ones
-            state.tiers = [];
-            tiersContainer.innerHTML = '';
-            
-            // Sort tiers by name for consistent ordering
-            const sortedTiers = Array.from(tierMap.entries()).sort((a, b) => {
-                const numA = parseInt(a[0].replace(/\D/g, '')) || 0;
-                const numB = parseInt(b[0].replace(/\D/g, '')) || 0;
-                return numA - numB;
-            });
-            
-            sortedTiers.forEach(([tierName, deltas]) => {
-                const tier = {
-                    id: Date.now() + Math.random(),
-                    name: tierName,
-                    deltas: {}
-                };
-                
-                // Initialize all sheets to 0, then apply imported deltas
-                state.sheetNames.forEach(sheetName => {
-                    tier.deltas[sheetName] = deltas[sheetName] || 0;
-                });
-                
-                state.tiers.push(tier);
-                renderTier(tier);
-            });
-            
-            updateGenerateButton();
-            
-            // Show summary of what was imported
-            const tabsWithDeltas = new Set();
-            tierMap.forEach(deltas => {
-                Object.keys(deltas).forEach(tab => tabsWithDeltas.add(tab));
-            });
-            
-            alert(`Imported ${tierMap.size} tier(s) with adjustments for ${tabsWithDeltas.size} tab(s)`);
-            
-        } catch (err) {
-            console.error('Error importing deltas:', err);
-            alert('Error importing deltas file. Please check the format.');
         }
-    };
-    reader.readAsArrayBuffer(file);
+        
+        if (tabCol === -1 || tierCol === -1 || deltaCol === -1) {
+            alert('Could not detect column format. Please use columns: Tab, Tier, Adjustment');
+            return;
+        }
+        
+        // Group by tier
+        const tierMap = new Map();
+        
+        for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row || row.length === 0) continue;
+            
+            const tabName = String(row[tabCol] || '').trim();
+            const tierValue = row[tierCol];
+            const delta = parseFloat(row[deltaCol]);
+            
+            if (!tabName || tierValue === undefined || isNaN(delta)) continue;
+            
+            let tierName = (typeof tierValue === 'number' || !isNaN(Number(tierValue))) 
+                ? `Tier ${tierValue}` 
+                : String(tierValue).trim();
+            
+            if (!tierMap.has(tierName)) tierMap.set(tierName, {});
+            tierMap.get(tierName)[tabName] = delta;
+        }
+        
+        if (tierMap.size === 0) {
+            alert('No valid tier data found in file.');
+            return;
+        }
+        
+        // Clear and rebuild tiers
+        state.tiers = [];
+        tiersContainer.innerHTML = '';
+        
+        const sortedTiers = Array.from(tierMap.entries()).sort((a, b) => {
+            const numA = parseInt(a[0].replace(/\D/g, '')) || 0;
+            const numB = parseInt(b[0].replace(/\D/g, '')) || 0;
+            return numA - numB;
+        });
+        
+        sortedTiers.forEach(([tierName, deltas]) => {
+            const tier = {
+                id: Date.now() + Math.random(),
+                name: tierName,
+                deltas: {}
+            };
+            
+            state.sheetNames.forEach(sheetName => {
+                tier.deltas[sheetName] = deltas[sheetName] || 0;
+            });
+            
+            state.tiers.push(tier);
+            renderTier(tier);
+        });
+        
+        updateGenerateButton();
+        
+        const tabsWithDeltas = new Set();
+        tierMap.forEach(deltas => Object.keys(deltas).forEach(tab => tabsWithDeltas.add(tab)));
+        
+        alert(`Imported ${tierMap.size} tier(s) with adjustments for ${tabsWithDeltas.size} tab(s)`);
+        
+    } catch (err) {
+        console.error('Error importing deltas:', err);
+        alert('Error importing deltas file. Please check the format.');
+    }
 }
 
 // ============================================
@@ -512,10 +483,6 @@ function setupGenerateControls() {
 }
 
 function updateGenerateButton() {
-    const hasDeltas = state.tiers.some(tier => 
-        Object.values(tier.deltas).some(d => d !== 0)
-    );
-    
     generateBtn.disabled = state.tiers.length === 0;
     
     if (state.tiers.length > 0) {
@@ -532,85 +499,84 @@ function disableStep3() {
     outputPreview.hidden = true;
 }
 
-function generateRatesheets() {
-    if (!state.baseWorkbook || state.tiers.length === 0) return;
+async function generateRatesheets() {
+    if (!state.baseFileBuffer || state.tiers.length === 0) return;
     
-    const separateFiles = separateFilesCheckbox.checked;
     const includeBase = includeBaseCheckbox.checked;
     
-    const generatedFiles = [];
+    updateStatus('Generating files...', true);
+    generateBtn.disabled = true;
     
-    if (separateFiles) {
-        // Generate separate file for each tier
-        state.tiers.forEach(tier => {
-            const newWorkbook = applyDeltasToWorkbook(state.baseWorkbook, tier);
-            const filename = generateFilename(state.baseFileName, tier.name);
-            generatedFiles.push({ workbook: newWorkbook, filename, tierName: tier.name });
-        });
+    try {
+        const generatedFiles = [];
         
+        // Generate file for each tier
+        for (const tier of state.tiers) {
+            const buffer = await applyDeltasToWorkbook(tier);
+            const filename = generateFilename(state.baseFileName, tier.name);
+            generatedFiles.push({ buffer, filename, tierName: tier.name });
+        }
+        
+        // Include base if requested
         if (includeBase) {
             generatedFiles.unshift({
-                workbook: state.baseWorkbook,
+                buffer: state.baseFileBuffer,
                 filename: state.baseFileName,
                 tierName: 'Base'
             });
         }
-    } else {
-        // All tiers in one file (different approach - add tier name to sheet names)
-        // For simplicity, we'll still do separate files
-        state.tiers.forEach(tier => {
-            const newWorkbook = applyDeltasToWorkbook(state.baseWorkbook, tier);
-            const filename = generateFilename(state.baseFileName, tier.name);
-            generatedFiles.push({ workbook: newWorkbook, filename, tierName: tier.name });
-        });
+        
+        showOutputPreview(generatedFiles);
+        updateStatus(`${generatedFiles.length} file(s) generated`);
+        
+        // Store generated files for re-download
+        state.generatedFiles = generatedFiles;
+        
+        // Auto-download all files
+        for (let i = 0; i < generatedFiles.length; i++) {
+            await new Promise(resolve => setTimeout(resolve, 300));
+            downloadBuffer(generatedFiles[i].buffer, generatedFiles[i].filename);
+        }
+        
+    } catch (err) {
+        console.error('Error generating files:', err);
+        alert('Error generating files: ' + err.message);
+        updateStatus('Error', false);
+    } finally {
+        generateBtn.disabled = false;
     }
-    
-    // Show preview and trigger downloads
-    showOutputPreview(generatedFiles);
-    updateStatus(`${generatedFiles.length} file(s) generated`);
-    
-    // Auto-download all files
-    generatedFiles.forEach((file, index) => {
-        setTimeout(() => {
-            downloadWorkbook(file.workbook, file.filename);
-        }, index * 500); // Stagger downloads
-    });
 }
 
-function applyDeltasToWorkbook(sourceWorkbook, tier) {
-    // Create a deep copy of the workbook
-    const newWorkbook = XLSX.utils.book_new();
+async function applyDeltasToWorkbook(tier) {
+    // Load a fresh copy of the workbook from the original buffer
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(state.baseFileBuffer);
     
-    sourceWorkbook.SheetNames.forEach(sheetName => {
-        const sourceSheet = sourceWorkbook.Sheets[sheetName];
-        const delta = tier.deltas[sheetName] || 0;
-        const gridInfo = state.pricingGrids[sheetName];
+    // Apply deltas to each worksheet
+    workbook.worksheets.forEach(worksheet => {
+        const delta = tier.deltas[worksheet.name] || 0;
+        const gridInfo = state.pricingGrids[worksheet.name];
         
-        // Clone the sheet
-        const newSheet = JSON.parse(JSON.stringify(sourceSheet));
-        
-        // Apply delta to pricing cells if grid was detected and delta is non-zero
         if (gridInfo && delta !== 0) {
+            // Apply delta to pricing cells
             for (let r = gridInfo.dataStartRow; r <= gridInfo.dataEndRow; r++) {
+                const row = worksheet.getRow(r);
                 for (let c = gridInfo.pricingStartCol; c <= gridInfo.pricingEndCol; c++) {
-                    const cellRef = XLSX.utils.encode_cell({ r, c });
-                    const cell = newSheet[cellRef];
+                    const cell = row.getCell(c);
+                    const value = cell.value;
                     
-                    if (cell && typeof cell.v === 'number') {
-                        cell.v = Math.round((cell.v + delta) * 10000) / 10000; // Round to 4 decimals
-                        // Update formatted value if present
-                        if (cell.w) {
-                            delete cell.w; // Let XLSX regenerate formatted value
-                        }
+                    // Only modify numeric values (not "na" or empty)
+                    if (typeof value === 'number') {
+                        cell.value = Math.round((value + delta) * 10000) / 10000;
                     }
                 }
             }
         }
-        
-        XLSX.utils.book_append_sheet(newWorkbook, newSheet, sheetName);
     });
     
-    return newWorkbook;
+    // Write to buffer (preserves all formatting)
+    const buffer = await workbook.xlsx.writeBuffer();
+    return buffer;
 }
 
 function generateFilename(baseFilename, tierName) {
@@ -619,9 +585,10 @@ function generateFilename(baseFilename, tierName) {
     return `${baseName}_${sanitizedTier}.xlsx`;
 }
 
-function downloadWorkbook(workbook, filename) {
-    const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+function downloadBuffer(buffer, filename) {
+    const blob = new Blob([buffer], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    });
     
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -646,31 +613,21 @@ function showOutputPreview(files) {
                 </div>
                 <span class="file-item-name">${file.filename}</span>
             </div>
-            <button class="btn btn-small btn-outline" onclick="redownloadFile('${file.tierName}')">
-                Download Again
+            <button class="btn btn-small btn-secondary" onclick="redownloadFile('${file.tierName}')">
+                Download
             </button>
         </div>
     `).join('');
 }
 
-// Make redownload available globally
+// Global functions
 window.redownloadFile = function(tierName) {
-    let workbook, filename;
-    
-    if (tierName === 'Base') {
-        workbook = state.baseWorkbook;
-        filename = state.baseFileName;
-    } else {
-        const tier = state.tiers.find(t => t.name === tierName);
-        if (!tier) return;
-        workbook = applyDeltasToWorkbook(state.baseWorkbook, tier);
-        filename = generateFilename(state.baseFileName, tier.name);
+    const file = state.generatedFiles?.find(f => f.tierName === tierName);
+    if (file) {
+        downloadBuffer(file.buffer, file.filename);
     }
-    
-    downloadWorkbook(workbook, filename);
 };
 
-// Make tier functions globally available
 window.updateTierName = updateTierName;
 window.updateDelta = updateDelta;
 window.styleDeltaInput = styleDeltaInput;
