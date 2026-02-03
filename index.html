@@ -3,127 +3,202 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tiered Ratesheet Generator</title>
+    <title>Tiered Ratesheet Generator | LoanExchange</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
-    <nav class="navbar">
-        <div class="nav-brand">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/>
-            </svg>
-            <span>Tiered Ratesheet Generator</span>
-        </div>
-        <div class="nav-links">
-            <a href="#how-it-works">How It Works</a>
-        </div>
-    </nav>
-
-    <main class="container">
-        <!-- Step 1: Upload Base Ratesheet -->
-        <section class="step-section" id="step-1">
-            <div class="step-header">
-                <span class="step-number">1</span>
-                <div>
-                    <h2>Upload Base Ratesheet</h2>
-                    <p class="step-description">Upload your master ratesheet file (.xlsx)</p>
+    <div class="app-layout">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <div class="logo-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7"/>
+                        </svg>
+                    </div>
+                    <span class="logo-text">Ratesheet Generator</span>
                 </div>
             </div>
             
-            <div class="upload-zone" id="base-upload-zone">
-                <input type="file" id="base-file-input" accept=".xlsx,.xls" hidden>
-                <div class="upload-content">
-                    <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                        <path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-                    </svg>
-                    <p class="upload-text">Drop your base ratesheet here or <span class="upload-link">browse</span></p>
-                    <p class="upload-hint">Supports .xlsx files</p>
-                </div>
-                <div class="upload-success" id="base-upload-success" hidden>
-                    <svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                    </svg>
-                    <div class="success-info">
-                        <span class="success-filename" id="base-filename"></span>
-                        <span class="success-details" id="base-details"></span>
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-section-title">Workflow</div>
+                    <div class="nav-item active" id="nav-step-1">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                        </svg>
+                        <span>Upload Ratesheet</span>
+                        <span class="step-badge">1</span>
                     </div>
-                    <button class="btn-remove" id="base-remove">×</button>
+                    <div class="nav-item" id="nav-step-2">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
+                        </svg>
+                        <span>Configure Tiers</span>
+                        <span class="step-badge">2</span>
+                    </div>
+                    <div class="nav-item" id="nav-step-3">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                        </svg>
+                        <span>Generate Files</span>
+                        <span class="step-badge">3</span>
+                    </div>
+                </div>
+                
+                <div class="nav-section">
+                    <div class="nav-section-title">Resources</div>
+                    <a class="nav-item" href="#how-it-works">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <span>Documentation</span>
+                    </a>
+                </div>
+            </nav>
+            
+            <div class="sidebar-footer">
+                <div class="sidebar-footer-text">
+                    Pricing Engine Tools<br>
+                    v1.0.0
                 </div>
             </div>
-        </section>
+        </aside>
 
-        <!-- Step 2: Configure Tiers -->
-        <section class="step-section disabled" id="step-2">
-            <div class="step-header">
-                <span class="step-number">2</span>
-                <div>
-                    <h2>Configure Pricing Tiers</h2>
-                    <p class="step-description">Define delta adjustments for each tier and product tab</p>
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="top-header">
+                <div class="header-left">
+                    <h1 class="page-title">Tiered Ratesheet Generation</h1>
+                    <span class="header-badge">PPE Distribution</span>
                 </div>
-            </div>
-
-            <div class="tier-controls">
-                <button class="btn btn-secondary" id="add-tier-btn">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
-                        <path d="M12 5v14m-7-7h14"/>
-                    </svg>
-                    Add Tier
-                </button>
-                <button class="btn btn-outline" id="import-deltas-btn">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
-                        <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
-                    </svg>
-                    Import Deltas File
-                </button>
-                <input type="file" id="deltas-file-input" accept=".xlsx,.xls,.csv" hidden>
-            </div>
-
-            <div class="tiers-container" id="tiers-container">
-                <!-- Tiers will be dynamically added here -->
-            </div>
-        </section>
-
-        <!-- Step 3: Generate -->
-        <section class="step-section disabled" id="step-3">
-            <div class="step-header">
-                <span class="step-number">3</span>
-                <div>
-                    <h2>Generate Tiered Ratesheets</h2>
-                    <p class="step-description">Download your adjusted ratesheet files</p>
+                <div class="header-actions">
+                    <div class="header-status">
+                        <span class="status-dot" id="status-dot"></span>
+                        <span id="status-text">Ready</span>
+                    </div>
                 </div>
-            </div>
+            </header>
 
-            <div class="generate-options">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="separate-files" checked>
-                    <span class="checkbox-custom"></span>
-                    Generate separate files per tier
-                </label>
-                <label class="checkbox-label">
-                    <input type="checkbox" id="include-base">
-                    <span class="checkbox-custom"></span>
-                    Include base ratesheet in output
-                </label>
-            </div>
+            <div class="content-area">
+                <!-- Step 1: Upload Base Ratesheet -->
+                <section id="step-1">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <span class="section-number" id="step-1-number">1</span>
+                            <h2>Upload Base Ratesheet</h2>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="upload-zone" id="base-upload-zone">
+                                <input type="file" id="base-file-input" accept=".xlsx,.xls" hidden>
+                                <div class="upload-content">
+                                    <div class="upload-icon-wrap">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                            <path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                                        </svg>
+                                    </div>
+                                    <p class="upload-text">Drop your base ratesheet here or <span class="upload-link">browse files</span></p>
+                                    <p class="upload-hint">Supports Excel files (.xlsx, .xls)</p>
+                                </div>
+                                <div class="upload-success" id="base-upload-success" hidden>
+                                    <div class="success-icon-wrap">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                        </svg>
+                                    </div>
+                                    <div class="success-info">
+                                        <span class="success-filename" id="base-filename"></span>
+                                        <span class="success-details" id="base-details"></span>
+                                    </div>
+                                    <button class="btn-remove" id="base-remove">×</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
 
-            <div class="generate-actions">
-                <button class="btn btn-primary btn-large" id="generate-btn" disabled>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
-                        <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-                    </svg>
-                    Generate Ratesheets
-                </button>
-            </div>
+                <!-- Step 2: Configure Tiers -->
+                <section id="step-2" class="disabled">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <span class="section-number" id="step-2-number">2</span>
+                            <h2>Configure Pricing Tiers</h2>
+                        </div>
+                        <div class="section-actions tier-controls">
+                            <button class="btn btn-secondary btn-small" id="import-deltas-btn">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                                </svg>
+                                Import Deltas
+                            </button>
+                            <button class="btn btn-primary btn-small" id="add-tier-btn">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M12 5v14m-7-7h14"/>
+                                </svg>
+                                Add Tier
+                            </button>
+                            <input type="file" id="deltas-file-input" accept=".xlsx,.xls,.csv" hidden>
+                        </div>
+                    </div>
 
-            <div class="output-preview" id="output-preview" hidden>
-                <h3>Generated Files</h3>
-                <div class="file-list" id="file-list"></div>
-            </div>
-        </section>
-    </main>
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="tiers-container" id="tiers-container">
+                                <!-- Tiers will be dynamically added here -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
 
-    <!-- How It Works Modal/Section -->
+                <!-- Step 3: Generate -->
+                <section id="step-3" class="disabled">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <span class="section-number" id="step-3-number">3</span>
+                            <h2>Generate & Download</h2>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="generate-section">
+                                <div class="generate-options">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="separate-files" checked>
+                                        <span class="checkbox-custom"></span>
+                                        Separate files per tier
+                                    </label>
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="include-base">
+                                        <span class="checkbox-custom"></span>
+                                        Include base ratesheet
+                                    </label>
+                                </div>
+                                <button class="btn btn-primary btn-large" id="generate-btn" disabled>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                                    </svg>
+                                    Generate Ratesheets
+                                </button>
+                            </div>
+
+                            <div class="output-preview" id="output-preview" hidden>
+                                <h3>Generated Files</h3>
+                                <div class="file-list" id="file-list"></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- How It Works Section -->
     <section class="info-section" id="how-it-works">
         <div class="info-container">
             <h2>How It Works</h2>
@@ -136,18 +211,18 @@
                 <div class="info-card">
                     <div class="info-number">2</div>
                     <h3>Define Tier Deltas</h3>
-                    <p>Set pricing adjustments per tab for each tier. Positive values improve pricing, negative values worsen it.</p>
+                    <p>Set pricing adjustments per tab for each tier. Positive improves pricing, negative worsens.</p>
                 </div>
                 <div class="info-card">
                     <div class="info-number">3</div>
                     <h3>Generate & Download</h3>
-                    <p>Generate adjusted ratesheets instantly. Each tier gets its own file with the deltas applied to the base pricing.</p>
+                    <p>Generate adjusted ratesheets instantly. Each tier gets its own file with deltas applied.</p>
                 </div>
             </div>
 
             <div class="delta-example">
                 <h3>Delta File Format</h3>
-                <p>You can import deltas from an Excel file. Supports multiple formats:</p>
+                <p>Import deltas from an Excel file with this structure:</p>
                 <table class="example-table">
                     <thead>
                         <tr>
@@ -172,22 +247,17 @@
                             <td>3</td>
                             <td>-0.50</td>
                         </tr>
-                        <tr>
-                            <td>DSCR2</td>
-                            <td>3</td>
-                            <td>0.50</td>
-                        </tr>
                     </tbody>
                 </table>
-                <p style="margin-top: 0.75rem; font-size: 0.8125rem; color: var(--color-gray-500);">
-                    Column headers can be: Tab/Sheet/Product, Tier, Adjustment/Delta/Adj
+                <p style="margin-top: 0.75rem; font-size: 0.75rem; color: rgba(255,255,255,0.5);">
+                    Flexible headers: Tab/Sheet/Product • Tier • Adjustment/Delta
                 </p>
             </div>
         </div>
     </section>
 
     <footer class="footer">
-        <p>Built for efficient ratesheet management</p>
+        <p>Pricing Engine Tools • Ratesheet Generation Module</p>
     </footer>
 
     <script src="app.js"></script>

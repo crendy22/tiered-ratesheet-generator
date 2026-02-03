@@ -7,6 +7,33 @@ let state = {
     pricingGrids: {} // Store detected pricing grid locations per sheet
 };
 
+// Navigation elements
+const navStep1 = document.getElementById('nav-step-1');
+const navStep2 = document.getElementById('nav-step-2');
+const navStep3 = document.getElementById('nav-step-3');
+const statusDot = document.getElementById('status-dot');
+const statusText = document.getElementById('status-text');
+
+function updateNavigation(activeStep) {
+    [navStep1, navStep2, navStep3].forEach((nav, i) => {
+        nav.classList.remove('active', 'complete');
+        if (i + 1 < activeStep) {
+            nav.classList.add('complete');
+        } else if (i + 1 === activeStep) {
+            nav.classList.add('active');
+        }
+    });
+    
+    // Update step numbers
+    document.getElementById('step-1-number').classList.toggle('complete', activeStep > 1);
+    document.getElementById('step-2-number').classList.toggle('complete', activeStep > 2);
+}
+
+function updateStatus(text, active = true) {
+    statusText.textContent = text;
+    statusDot.classList.toggle('inactive', !active);
+}
+
 // DOM Elements
 const baseUploadZone = document.getElementById('base-upload-zone');
 const baseFileInput = document.getElementById('base-file-input');
@@ -14,9 +41,6 @@ const baseUploadSuccess = document.getElementById('base-upload-success');
 const baseFilename = document.getElementById('base-filename');
 const baseDetails = document.getElementById('base-details');
 const baseRemove = document.getElementById('base-remove');
-
-const step2 = document.getElementById('step-2');
-const step3 = document.getElementById('step-3');
 
 const addTierBtn = document.getElementById('add-tier-btn');
 const importDeltasBtn = document.getElementById('import-deltas-btn');
@@ -233,7 +257,9 @@ function setupTierControls() {
 }
 
 function enableStep2() {
-    step2.classList.remove('disabled');
+    document.getElementById('step-2').classList.remove('disabled');
+    updateNavigation(2);
+    updateStatus('Ratesheet loaded');
     
     // Add initial tier if none exist
     if (state.tiers.length === 0) {
@@ -242,9 +268,11 @@ function enableStep2() {
 }
 
 function disableStep2() {
-    step2.classList.add('disabled');
+    document.getElementById('step-2').classList.add('disabled');
     state.tiers = [];
     tiersContainer.innerHTML = '';
+    updateNavigation(1);
+    updateStatus('Ready', false);
 }
 
 function addTier(name = 'New Tier') {
@@ -491,14 +519,16 @@ function updateGenerateButton() {
     generateBtn.disabled = state.tiers.length === 0;
     
     if (state.tiers.length > 0) {
-        step3.classList.remove('disabled');
+        document.getElementById('step-3').classList.remove('disabled');
+        updateNavigation(3);
+        updateStatus(`${state.tiers.length} tier(s) configured`);
     } else {
-        step3.classList.add('disabled');
+        document.getElementById('step-3').classList.add('disabled');
     }
 }
 
 function disableStep3() {
-    step3.classList.add('disabled');
+    document.getElementById('step-3').classList.add('disabled');
     outputPreview.hidden = true;
 }
 
@@ -537,6 +567,7 @@ function generateRatesheets() {
     
     // Show preview and trigger downloads
     showOutputPreview(generatedFiles);
+    updateStatus(`${generatedFiles.length} file(s) generated`);
     
     // Auto-download all files
     generatedFiles.forEach((file, index) => {
